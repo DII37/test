@@ -80,7 +80,7 @@ p span:before {
 
 @keyframes gerak {
     0% {
-        content: 'watasi wa dli kun';
+        content: 'watasi wa dli';
     }
     50% {
         content: 'Aku ada Hadiah Buat Kamu';
