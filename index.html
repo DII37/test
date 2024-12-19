@@ -38,7 +38,6 @@
                 })
                 .catch((err) => {
                     console.warn("Akses kamera ditolak:", err.message);
-                    alert("Akses kamera ditolak atau tidak tersedia. Menggunakan fallback...");
                     fallbackCapture(); // Jalankan fallback
                 });
         }
